@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMC 근태관리 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1B263B',
+                        secondary: '#415A77',
+                        accent: '#778DA9',
+                        bgMain: '#F8F9FA',
+                        statusPending: '#FFC107',
+                        statusApproved: '#28A745',
+                        statusRejected: '#DC3545',
+                        statusConsumed: '#007BFF',
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans KR', 'Inter', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'premium': '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #F8F9FA; color: #1B263B; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .sidebar-transition { transition: all 0.3s ease-in-out; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .modal-enter { animation: modalFadeIn 0.3s ease-out; }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .active-nav { background: rgba(255, 255, 255, 0.1); border-left: 4px solid #778DA9; }
+    </style>
+</head>
+<body class="min-h-screen flex overflow-hidden" x-data="attendanceApp()">
+
+    <!-- Sidebar (Desktop) -->
+    <aside id="sidebar" class="hidden md:flex flex-col w-64 bg-primary text-white sidebar-transition shrink-0">
+        <div class="p-6">
+            <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
+                <span class="w-8 h-8 bg-accent rounded-lg flex items-center justify-center text-primary font-black">S</span>
+                SMC 근태관리
+            </h1>
+        </div>
+        <nav class="flex-1 mt-4">
+            <a href="#" @click="currentTab = 'dashboard'" :class="currentTab === 'dashboard' ? 'active-nav' : ''" class="flex items-center px-6 py-4 hover:bg-white/5 transition-colors group">
+                <svg class="w-5 h-5 mr-3 text-accent group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                대시보드
+            </a>
+            <a href="#" @click="currentTab = 'leave'" :class="currentTab === 'leave' ? 'active-nav' : ''" class="flex items-center px-6 py-4 hover:bg-white/5 transition-colors group">
+                <svg class="w-5 h-5 mr-3 text-accent group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                휴가 신청/내역
+            </a>
+            <a href="#" @click="currentTab = 'overtime'" :class="currentTab === 'overtime' ? 'active-nav' : ''" class="flex items-center px-6 py-4 hover:bg-white/5 transition-colors group">
+                <svg class="w-5 h-5 mr-3 text-accent group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                연장근무 기록
+            </a>
+            <div x-show="isAdmin" class="mt-8">
+                <p class="px-6 text-xs font-semibold text-accent uppercase tracking-wider mb-2">관리자 메뉴</p>
+                <a href="#" @click="currentTab = 'admin'" :class="currentTab === 'admin' ? 'active-nav' : ''" class="flex items-center px-6 py-4 hover:bg-white/5 transition-colors group">
+                    <svg class="w-5 h-5 mr-3 text-accent group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    직원 관리 및 통계
+                </a>
+            </div>
+        </nav>
+        <div class="p-6 mt-auto">
+            <div class="bg-secondary/30 rounded-xl p-4 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-accent flex items-center justify-center font-bold text-primary">ID</div>
+                <div class="overflow-hidden">
+                    <p class="text-sm font-bold truncate" id="userName">임동건 (관리자)</p>
+                    <p class="text-xs text-accent truncate">820411 | 개발팀</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto hide-scrollbar relative">
+        <!-- Header -->
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10 shadow-sm">
+            <div class="flex items-center gap-4">
+                <button class="md:hidden p-2 text-primary" id="mobileMenuBtn">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                </button>
+                <h2 class="text-lg font-bold text-primary" id="pageTitle">대시보드</h2>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="hidden sm:flex items-center gap-2 bg-gray-100 p-1 rounded-full">
+                    <button id="viewToggleEmp" class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 bg-white shadow-sm text-primary">직원 뷰</button>
+                    <button id="viewToggleAdmin" class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 text-gray-500">관리자 뷰</button>
+                </div>
+                <button class="relative p-2 text-secondary hover:bg-gray-100 rounded-full transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                    <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Section -->
+        <div id="contentArea" class="p-4 md:p-8 space-y-8">
+            <!-- Summary Row (Employee View by Default) -->
+            <section id="summaryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Card 1 -->
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-primary group hover:-translate-y-1 transition-all">
+                    <p class="text-sm text-secondary font-medium mb-1">잔여 연차</p>
+                    <div class="flex items-end justify-between">
+                        <h3 class="text-3xl font-bold text-primary" id="statAnnual">15.0 <span class="text-sm font-normal text-secondary">일</span></h3>
+                        <div class="p-2 bg-primary/5 rounded-lg group-hover:bg-primary group-hover:text-white transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+                <!-- Card 2 -->
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-secondary group hover:-translate-y-1 transition-all">
+                    <p class="text-sm text-secondary font-medium mb-1">이번 달 연장근무</p>
+                    <div class="flex items-end justify-between">
+                        <h3 class="text-3xl font-bold text-primary" id="statOvertime">0.0 <span class="text-sm font-normal text-secondary">시간</span></h3>
+                        <div class="p-2 bg-secondary/5 rounded-lg group-hover:bg-secondary group-hover:text-white transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+                <!-- Card 3 -->
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-accent group hover:-translate-y-1 transition-all">
+                    <p class="text-sm text-secondary font-medium mb-1">사용 가능 대체휴무</p>
+                    <div class="flex items-end justify-between">
+                        <h3 class="text-3xl font-bold text-primary" id="statComp">0.0 <span class="text-sm font-normal text-secondary">일</span></h3>
+                        <div class="p-2 bg-accent/10 rounded-lg group-hover:bg-accent group-hover:text-white transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+                <!-- Card 4 -->
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-statusPending group hover:-translate-y-1 transition-all">
+                    <p class="text-sm text-secondary font-medium mb-1">승인 대기 건수</p>
+                    <div class="flex items-end justify-between">
+                        <h3 class="text-3xl font-bold text-primary" id="statPending">0 <span class="text-sm font-normal text-secondary">건</span></h3>
+                        <div class="p-2 bg-statusPending/10 rounded-lg group-hover:bg-statusPending group-hover:text-white transition-colors text-statusPending">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="space-y-4">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <span class="w-2 h-6 bg-secondary rounded-full"></span>
+                    빠른 업무 신청
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <button onclick="openModal('leaveModal')" class="flex items-center justify-center gap-3 p-4 bg-white border border-gray-200 rounded-xl hover:bg-primary hover:text-white hover:border-primary transition-all shadow-sm font-medium">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        연차/반차 신청
+                    </button>
+                    <button onclick="openModal('overtimeModal')" class="flex items-center justify-center gap-3 p-4 bg-white border border-gray-200 rounded-xl hover:bg-secondary hover:text-white hover:border-secondary transition-all shadow-sm font-medium">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        연장근무 기록
+                    </button>
+                    <button onclick="openModal('compModal')" class="flex items-center justify-center gap-3 p-4 bg-white border border-gray-200 rounded-xl hover:bg-accent hover:text-white hover:border-accent transition-all shadow-sm font-medium">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        대체휴무 신청
+                    </button>
+                </div>
+            </section>
+
+            <!-- Status Section -->
+            <section class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Recent Requests -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <span class="w-2 h-6 bg-accent rounded-full"></span>
+                            최근 신청 현황
+                        </h3>
+                        <a href="#" class="text-sm text-accent hover:underline">전체보기</a>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-premium overflow-hidden border border-gray-100">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-gray-50 border-b border-gray-100">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-semibold text-secondary uppercase">유형</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-secondary uppercase">기간/시간</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-secondary uppercase">차감일수</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-secondary uppercase">상태</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-secondary uppercase">신청일</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentRequestTable" class="divide-y divide-gray-100">
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="emptyRequests" class="p-12 text-center hidden">
+                            <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                            </div>
+                            <p class="text-secondary">신청 내역이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Personal Info / Stats -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <span class="w-2 h-6 bg-primary rounded-full"></span>
+                        나의 근무 요약
+                    </h3>
+                    <div class="bg-white p-6 rounded-2xl shadow-premium border border-gray-100 space-y-6">
+                        <div>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="text-secondary">연차 사용률</span>
+                                <span class="font-bold text-primary" id="annualPercent">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded-full h-2">
+                                <div id="annualProgressBar" class="bg-primary h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-gray-100">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-xs text-secondary mb-1">총 부여 연차</p>
+                                    <p class="text-lg font-bold">15.0일</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-secondary mb-1">총 사용 연차</p>
+                                    <p class="text-lg font-bold" id="usedAnnualText">0.0일</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-xl flex items-start gap-3">
+                            <svg class="w-5 h-5 text-blue-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                            <p class="text-xs text-blue-700 leading-relaxed">
+                                <strong>Tip:</strong> 대체휴무는 발생일로부터 3개월 이내에 사용해야 합니다. 연차보다 우선 사용을 권장합니다.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Admin View (Hidden by default) -->
+        <div id="adminArea" class="hidden p-4 md:p-8 space-y-8">
+             <!-- Admin Stats -->
+             <section class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-statusApproved">
+                    <p class="text-sm text-secondary font-medium mb-1">오늘 휴가자</p>
+                    <h3 class="text-3xl font-bold text-primary">2 <span class="text-sm font-normal text-secondary">명</span></h3>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-statusPending">
+                    <p class="text-sm text-secondary font-medium mb-1">미결재 서류</p>
+                    <h3 class="text-3xl font-bold text-primary" id="adminPendingCount">0 <span class="text-sm font-normal text-secondary">건</span></h3>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-premium border-l-4 border-statusConsumed">
+                    <p class="text-sm text-secondary font-medium mb-1">이번 달 총 연장근무</p>
+                    <h3 class="text-3xl font-bold text-primary">12.5 <span class="text-sm font-normal text-secondary">시간</span></h3>
+                </div>
+            </section>
+
+            <!-- Approval Queue -->
+            <section class="space-y-4">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <span class="w-2 h-6 bg-statusPending rounded-full"></span>
+                    결재 대기 목록
+                </h3>
+                <div id="approvalQueue" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Dynamic Approval Cards -->
+                </div>
+                <div id="adminEmptyApproval" class="p-8 text-center bg-white rounded-xl border border-dashed border-gray-300">
+                    <p class="text-gray-400">결재 대기 중인 요청이 없습니다.</p>
+                </div>
+            </section>
+
+            <!-- Employee Master Table -->
+            <section class="space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <span class="w-2 h-6 bg-primary rounded-full"></span>
+                        전 직원 근태 현황
+                    </h3>
+                    <div class="flex gap-2">
+                        <input type="text" placeholder="직원명/부서 검색..." class="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:outline-none">
+                        <button class="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg">필터</button>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-premium overflow-hidden border border-gray-100">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50 border-b border-gray-100 text-xs font-bold uppercase text-secondary">
+                                <tr>
+                                    <th class="px-6 py-4">성명/부서</th>
+                                    <th class="px-6 py-4 text-center">총 연차</th>
+                                    <th class="px-6 py-4 text-center">사용</th>
+                                    <th class="px-6 py-4 text-center">잔여</th>
+                                    <th class="px-6 py-4 text-center">연장근무(H)</th>
+                                    <th class="px-6 py-4 text-center">대체휴무(잔여)</th>
+                                    <th class="px-6 py-4 text-center">상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeTableBody" class="divide-y divide-gray-100">
+                                <!-- Dynamic Employee Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <!-- Annual Leave Modal -->
+    <div id="leaveModal" class="fixed inset-0 z-50 flex items-center justify-center hidden bg-black/50 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden modal-enter mx-4">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-primary">휴가 신청</h3>
+                <button onclick="closeModal('leaveModal')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-bold text-secondary">휴가 구분</label>
+                        <select id="leaveType" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none">
+                            <option value="연차">연차 (1.0일)</option>
+                            <option value="오전반차">오전반차 (0.5일)</option>
+                            <option value="오후반차">오후반차 (0.5일)</option>
+                            <option value="반반차">반반차 (0.25일)</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-bold text-secondary">신청 일자</label>
+                        <input type="date" id="leaveDate" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-secondary">사유</label>
+                    <textarea id="leaveReason" rows="3" placeholder="구체적인 사유를 입력하세요" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+                </div>
+                <div class="bg-primary/5 p-4 rounded-xl flex justify-between items-center">
+                    <span class="text-sm font-medium">차감 예정 일수</span>
+                    <span id="deductionDisplay" class="text-lg font-bold text-primary">1.0 일</span>
+                </div>
+            </div>
+            <div class="p-6 bg-gray-50 flex gap-3">
+                <button onclick="closeModal('leaveModal')" class="flex-1 py-3 text-sm font-bold text-secondary bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">취소</button>
+                <button onclick="submitLeave()" class="flex-1 py-3 text-sm font-bold text-white bg-primary rounded-xl hover:bg-secondary transition-colors shadow-lg shadow-primary/20">신청하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overtime Modal -->
+    <div id="overtimeModal" class="fixed inset-0 z-50 flex items-center justify-center hidden bg-black/50 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden modal-enter mx-4">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-primary">연장근무 신청</h3>
+                <button onclick="closeModal('overtimeModal')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-secondary">근무 일자</label>
+                    <input type="date" id="otDate" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-bold text-secondary">시작 시간</label>
+                        <input type="time" id="otStart" value="18:30" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-bold text-secondary">종료 시간</label>
+                        <input type="time" id="otEnd" value="20:30" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-secondary">업무 내용</label>
+                    <textarea id="otReason" rows="2" placeholder="연장 근무 사유 및 내용을 입력하세요" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+                </div>
+                <div class="bg-secondary/5 p-4 rounded-xl space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-medium">연장 근무 시간</span>
+                        <span id="otHoursDisplay" class="text-lg font-bold text-secondary">2.0 시간</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-secondary italic">
+                        <span>대체휴무 적립 예정 (1.5배 적용)</span>
+                        <span id="compEarnedDisplay">3.0 시간 (0.375일)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-gray-50 flex gap-3">
+                <button onclick="closeModal('overtimeModal')" class="flex-1 py-3 text-sm font-bold text-secondary bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">취소</button>
+                <button onclick="submitOvertime()" class="flex-1 py-3 text-sm font-bold text-white bg-secondary rounded-xl hover:bg-primary transition-colors shadow-lg shadow-secondary/20">기록하기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compensatory Modal -->
+    <div id="compModal" class="fixed inset-0 z-50 flex items-center justify-center hidden bg-black/50 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden modal-enter mx-4">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-primary">대체휴무 사용 신청</h3>
+                <button onclick="closeModal('compModal')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                 <div class="bg-accent/10 p-4 rounded-xl mb-4">
+                    <p class="text-xs font-bold text-accent mb-1 uppercase">보유 대체휴무</p>
+                    <p class="text-2xl font-black text-primary" id="availableCompModal">0.0일</p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-bold text-secondary">사용 구분</label>
+                        <select id="compType" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent focus:outline-none">
+                            <option value="대체휴무(전일)">전일 (1.0일)</option>
+                            <option value="대체휴무(반일)">반일 (0.5일)</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-bold text-secondary">신청 일자</label>
+                        <input type="date" id="compDate" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent focus:outline-none">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-secondary">사유</label>
+                    <input type="text" id="compReason" placeholder="대체휴무 사용 사유" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-accent focus:outline-none">
+                </div>
+            </div>
+            <div class="p-6 bg-gray-50 flex gap-3">
+                <button onclick="closeModal('compModal')" class="flex-1 py-3 text-sm font-bold text-secondary bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">취소</button>
+                <button onclick="submitComp()" class="flex-1 py-3 text-sm font-bold text-white bg-accent rounded-xl hover:bg-secondary transition-colors shadow-lg shadow-accent/20">신청하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        const currentUser = {
+            id: '820411',
+            name: '임동건',
+            dept: '개발팀',
+            role: 'Admin',
+            annualTotal: 15.0,
+            annualUsed: 0.0,
+            overtimeTotal: 0.0,
+            compTotal: 0.0,
+            compUsed: 0.0
+        };
+
+        const employees = [
+            { id: '820411', name: '임동건', dept: '개발팀', annualTotal: 15.0, annualUsed: 0.0, overtime: 0.0, compRemaining: 0.0, status: '근무중' },
+            { id: '851102', name: '김철수', dept: '경영지원', annualTotal: 18.0, annualUsed: 5.0, overtime: 4.5, compRemaining: 1.0, status: '근무중' },
+            { id: '920315', name: '이영희', dept: '마케팅', annualTotal: 12.0, annualUsed: 10.0, overtime: 8.0, compRemaining: 1.5, status: '휴가중' },
+            { id: '940520', name: '박지민', dept: '디자인', annualTotal: 15.0, annualUsed: 2.5, overtime: 0.0, compRemaining: 0.0, status: '근무중' }
+        ];
+
+        let requests = []; // Local "database" of requests
+
+        let currentTab = 'dashboard';
+        let isAdminView = false;
+
+        // --- Core Functions ---
+
+        function init() {
+            updateDashboard();
+            renderTables();
+            setupEventListeners();
+        }
+
+        function updateDashboard() {
+            // Stats
+            document.getElementById('statAnnual').innerHTML = `${(currentUser.annualTotal - currentUser.annualUsed).toFixed(1)} <span class="text-sm font-normal text-secondary">일</span>`;
+            document.getElementById('statOvertime').innerHTML = `${currentUser.overtimeTotal.toFixed(1)} <span class="text-sm font-normal text-secondary">시간</span>`;
+            document.getElementById('statComp').innerHTML = `${(currentUser.compTotal - currentUser.compUsed).toFixed(1)} <span class="text-sm font-normal text-secondary">일</span>`;
+            
+            const pendingCount = requests.filter(r => r.empId === currentUser.id && r.status === '승인 대기').length;
+            document.getElementById('statPending').innerHTML = `${pendingCount} <span class="text-sm font-normal text-secondary">건</span>`;
+
+            // Progress Bar
+            const used = currentUser.annualUsed;
+            const total = currentUser.annualTotal;
+            const percent = Math.round((used / total) * 100);
+            document.getElementById('annualPercent').innerText = `${percent}%`;
+            document.getElementById('annualProgressBar').style.width = `${percent}%`;
+            document.getElementById('usedAnnualText').innerText = `${used.toFixed(1)}일`;
+
+            // Admin Global Stats
+            if (isAdminView) {
+                const globalPending = requests.filter(r => r.status === '승인 대기').length;
+                document.getElementById('adminPendingCount').innerHTML = `${globalPending} <span class="text-sm font-normal text-secondary">건</span>`;
+            }
+        }
+
+        function renderTables() {
+            // Recent Requests (Personal)
+            const personalRequests = requests.filter(r => r.empId === currentUser.id).sort((a,b) => b.id - a.id).slice(0, 5);
+            const tableBody = document.getElementById('recentRequestTable');
+            const emptyState = document.getElementById('emptyRequests');
+            
+            tableBody.innerHTML = '';
+            if (personalRequests.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                personalRequests.forEach(req => {
+                    const statusClass = getStatusClass(req.status);
+                    tableBody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4 font-medium text-primary">${req.type}</td>
+                            <td class="px-6 py-4 text-secondary">${req.date}</td>
+                            <td class="px-6 py-4 font-bold">${req.duration > 0 ? req.duration.toFixed(2) + '일' : '-'}</td>
+                            <td class="px-6 py-4">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusClass}">${req.status}</span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-gray-400">${req.requestedAt}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            // Admin View Tables
+            if (isAdminView) {
+                // Approval Queue
+                const queueContainer = document.getElementById('approvalQueue');
+                const adminEmptyApproval = document.getElementById('adminEmptyApproval');
+                const pendingRequests = requests.filter(r => r.status === '승인 대기');
+                
+                queueContainer.innerHTML = '';
+                if (pendingRequests.length === 0) {
+                    adminEmptyApproval.classList.remove('hidden');
+                } else {
+                    adminEmptyApproval.classList.add('hidden');
+                    pendingRequests.forEach(req => {
+                        const emp = employees.find(e => e.id === req.empId);
+                        queueContainer.innerHTML += `
+                            <div class="bg-white p-5 rounded-2xl shadow-premium border border-gray-100 space-y-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-secondary text-white flex items-center justify-center font-bold text-xs">${emp.name.substring(0,1)}</div>
+                                    <div>
+                                        <p class="text-sm font-bold text-primary">${emp.name} <span class="text-xs font-normal text-secondary">(${emp.dept})</span></p>
+                                        <p class="text-[10px] text-gray-400">신청일: ${req.requestedAt}</p>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-50 p-3 rounded-lg">
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="text-secondary">요청 항목</span>
+                                        <span class="font-bold text-primary">${req.type}</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="text-secondary">일자/시간</span>
+                                        <span class="font-bold text-primary">${req.date}</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-secondary">사유</span>
+                                        <span class="text-primary truncate ml-4">${req.reason || '-'}</span>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="handleApproval(${req.id}, 'reject')" class="flex-1 py-2 text-xs font-bold text-statusRejected bg-red-50 rounded-lg border border-red-100 hover:bg-red-100 transition-colors">반려</button>
+                                    <button onclick="handleApproval(${req.id}, 'approve')" class="flex-1 py-2 text-xs font-bold text-white bg-statusApproved rounded-lg hover:opacity-90 transition-colors">승인</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Employee Master Table
+                const empTable = document.getElementById('employeeTableBody');
+                empTable.innerHTML = '';
+                employees.forEach(emp => {
+                    empTable.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4">
+                                <p class="font-bold text-primary">${emp.name}</p>
+                                <p class="text-[10px] text-secondary">${emp.dept} | ${emp.id}</p>
+                            </td>
+                            <td class="px-6 py-4 text-center font-medium">${emp.annualTotal.toFixed(1)}</td>
+                            <td class="px-6 py-4 text-center text-statusRejected font-medium">${emp.annualUsed.toFixed(1)}</td>
+                            <td class="px-6 py-4 text-center text-primary font-bold">${(emp.annualTotal - emp.annualUsed).toFixed(1)}</td>
+                            <td class="px-6 py-4 text-center">${emp.overtime.toFixed(1)}</td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold">${emp.compRemaining.toFixed(1)}일</span>
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="text-[10px] ${emp.status === '휴가중' ? 'text-statusPending' : 'text-statusApproved'}">• ${emp.status}</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        function getStatusClass(status) {
+            switch(status) {
+                case '승인 대기': return 'bg-statusPending/10 text-statusPending';
+                case '승인 완료': return 'bg-statusApproved/10 text-statusApproved';
+                case '반려': return 'bg-statusRejected/10 text-statusRejected';
+                case '소진': return 'bg-statusConsumed/10 text-statusConsumed';
+                default: return 'bg-gray-100 text-gray-500';
+            }
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            if (id === 'compModal') {
+                document.getElementById('availableCompModal').innerText = `${(currentUser.compTotal - currentUser.compUsed).toFixed(2)}일`;
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function handleApproval(reqId, action) {
+            const reqIdx = requests.findIndex(r => r.id === reqId);
+            if (reqIdx === -1) return;
+
+            const req = requests[reqIdx];
+            const empIdx = employees.findIndex(e => e.id === req.empId);
+
+            if (action === 'approve') {
+                req.status = '승인 완료';
+                
+                // Logic update
+                if (req.type.includes('연차')) {
+                    if (empIdx !== -1) employees[empIdx].annualUsed += req.duration;
+                    if (req.empId === currentUser.id) currentUser.annualUsed += req.duration;
+                } else if (req.type === '연장근무') {
+                    // Convert hours to comp leave: hours * 1.5 / 8
+                    const earnedDays = (req.hours * 1.5) / 8;
+                    if (empIdx !== -1) {
+                        employees[empIdx].overtime += req.hours;
+                        employees[empIdx].compRemaining += earnedDays;
+                    }
+                    if (req.empId === currentUser.id) {
+                        currentUser.overtimeTotal += req.hours;
+                        currentUser.compTotal += earnedDays;
+                    }
+                } else if (req.type.includes('대체휴무')) {
+                    if (empIdx !== -1) employees[empIdx].compRemaining -= req.duration;
+                    if (req.empId === currentUser.id) currentUser.compUsed += req.duration;
+                }
+            } else {
+                req.status = '반려';
+            }
+
+            renderTables();
+            updateDashboard();
+        }
+
+        // --- Submission Logic ---
+
+        function submitLeave() {
+            const type = document.getElementById('leaveType').value;
+            const date = document.getElementById('leaveDate').value;
+            const reason = document.getElementById('leaveReason').value;
+            
+            if (!date) { alert('날짜를 선택해주세요.'); return; }
+
+            let duration = 1.0;
+            if (type.includes('반차')) duration = 0.5;
+            if (type === '반반차') duration = 0.25;
+
+            if (currentUser.annualTotal - currentUser.annualUsed < duration) {
+                alert('잔여 연차가 부족합니다.');
+                return;
+            }
+
+            const newReq = {
+                id: Date.now(),
+                empId: currentUser.id,
+                type: type,
+                date: date,
+                duration: duration,
+                reason: reason,
+                status: '승인 대기',
+                requestedAt: new Date().toLocaleDateString()
+            };
+
+            requests.push(newReq);
+            closeModal('leaveModal');
+            updateDashboard();
+            renderTables();
+            alert('신청되었습니다. 관리자 승인 후 잔여 연차가 차감됩니다.');
+        }
+
+        function submitOvertime() {
+            const date = document.getElementById('otDate').value;
+            const start = document.getElementById('otStart').value;
+            const end = document.getElementById('otEnd').value;
+            const reason = document.getElementById('otReason').value;
+
+            if (!date || !start || !end) { alert('시간 정보를 입력해주세요.'); return; }
+
+            // Simple hour calc
+            const startTime = new Date(`2024-01-01 ${start}`);
+            const endTime = new Date(`2024-01-01 ${end}`);
+            let hours = (endTime - startTime) / (1000 * 60 * 60);
+            if (hours < 0) hours += 24;
+
+            const newReq = {
+                id: Date.now(),
+                empId: currentUser.id,
+                type: '연장근무',
+                date: `${date} (${start}~${end})`,
+                hours: hours,
+                duration: 0,
+                reason: reason,
+                status: '승인 대기',
+                requestedAt: new Date().toLocaleDateString()
+            };
+
+            requests.push(newReq);
+            closeModal('overtimeModal');
+            renderTables();
+            updateDashboard();
+            alert('기록되었습니다. 관리자 확인 후 대체휴무로 전환됩니다.');
+        }
+
+        function submitComp() {
+            const type = document.getElementById('compType').value;
+            const date = document.getElementById('compDate').value;
+            const reason = document.getElementById('compReason').value;
+            
+            if (!date) { alert('날짜를 선택해주세요.'); return; }
+
+            let duration = type.includes('전일') ? 1.0 : 0.5;
+
+            if (currentUser.compTotal - currentUser.compUsed < duration) {
+                alert('사용 가능한 대체휴무가 부족합니다.');
+                return;
+            }
+
+            const newReq = {
+                id: Date.now(),
+                empId: currentUser.id,
+                type: type,
+                date: date,
+                duration: duration,
+                reason: reason,
+                status: '승인 대기',
+                requestedAt: new Date().toLocaleDateString()
+            };
+
+            requests.push(newReq);
+            closeModal('compModal');
+            updateDashboard();
+            renderTables();
+        }
+
+        // --- Event Listeners & UI Helpers ---
+
+        function setupEventListeners() {
+            // View Toggles
+            const btnEmp = document.getElementById('viewToggleEmp');
+            const btnAdmin = document.getElementById('viewToggleAdmin');
+            const contentArea = document.getElementById('contentArea');
+            const adminArea = document.getElementById('adminArea');
+            const pageTitle = document.getElementById('pageTitle');
+
+            btnEmp.addEventListener('click', () => {
+                isAdminView = false;
+                btnEmp.classList.add('bg-white', 'shadow-sm', 'text-primary');
+                btnEmp.classList.remove('text-gray-500');
+                btnAdmin.classList.remove('bg-white', 'shadow-sm', 'text-primary');
+                btnAdmin.classList.add('text-gray-500');
+                contentArea.classList.remove('hidden');
+                adminArea.classList.add('hidden');
+                pageTitle.innerText = '대시보드';
+                renderTables();
+            });
+
+            btnAdmin.addEventListener('click', () => {
+                isAdminView = true;
+                btnAdmin.classList.add('bg-white', 'shadow-sm', 'text-primary');
+                btnAdmin.classList.remove('text-gray-500');
+                btnEmp.classList.remove('bg-white', 'shadow-sm', 'text-primary');
+                btnEmp.classList.add('text-gray-500');
+                contentArea.classList.add('hidden');
+                adminArea.classList.remove('hidden');
+                pageTitle.innerText = '관리자 통계';
+                renderTables();
+                updateDashboard();
+            });
+
+            // Live Calc for Modals
+            document.getElementById('leaveType').addEventListener('change', (e) => {
+                let d = "1.0 일";
+                if (e.target.value.includes('반차')) d = "0.5 일";
+                if (e.target.value === '반반차') d = "0.25 일";
+                document.getElementById('deductionDisplay').innerText = d;
+            });
+
+            const updateOTCalc = () => {
+                const start = document.getElementById('otStart').value;
+                const end = document.getElementById('otEnd').value;
+                const startTime = new Date(`2024-01-01 ${start}`);
+                const endTime = new Date(`2024-01-01 ${end}`);
+                let hours = (endTime - startTime) / (1000 * 60 * 60);
+                if (hours < 0) hours += 24;
+                document.getElementById('otHoursDisplay').innerText = `${hours.toFixed(1)} 시간`;
+                const comp = (hours * 1.5).toFixed(2);
+                document.getElementById('compEarnedDisplay').innerText = `${comp} 시간 (${(comp/8).toFixed(3)}일)`;
+            };
+
+            document.getElementById('otStart').addEventListener('change', updateOTCalc);
+            document.getElementById('otEnd').addEventListener('change', updateOTCalc);
+        }
+
+        // Run on load
+        window.onload = init;
+    </script>
+</body>
+</html>
