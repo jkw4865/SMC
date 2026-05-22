@@ -1,0 +1,2 @@
+# SMC
+attendance management
